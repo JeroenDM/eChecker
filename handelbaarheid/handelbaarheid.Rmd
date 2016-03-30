@@ -1,0 +1,95 @@
+---
+title: "Handelbaarheid"
+author: "Jeroen De Maeyer"
+date: "30 maart 2016"
+output: html_document
+---
+
+Het eerste idee voor handelbaarheid is de stapresponsie bekijken.
+Omdat het vermogen aan het wiel nog niet rechtstreeks gemeten kan worden moet eerst een test zonder motor worden gedaan als referentie.
+
+De eenvoudigste manier leek mij twee maal een stap aan leggen, een keer zonder assestentie en een keer met. Dit toegepast op een grandville fiets.
+Met het commando **e_KA 1000** wordt een stap in de *crank drive control value* aangelegd en 5 aangehouden. Om herhaalbaarheid van de testen te verzekeren word the pedaal eerst in een vaste positie gezet met volgende reeks commando's:
+
+```
+w_DIR r # change crank drive direction to backward
+w_KAPOS 40, 500 # Turn crank to position 40 (0-71) with control value 500
+w_DIR v # change crank drive direction to forward
+```
+Het volledige programma **AA_Step_10kmh** twee maal uitvoeren leverd dan volgende resultaten op:
+
+```{r}
+setwd("C:/Users/jeroen.demaeyer/Google Drive/TGVelo/Studies/echecker/handelbaarheid")
+
+dfz <- read.csv2("A0constant.csv") # N0 assistance
+dfm <- read.csv2("A4constant.csv") # assistance level 4
+
+par(mfrow=c(2,2)) # combine plots in one window
+plot(dfz$ta/1000, dfz$v)
+plot(dfm$ta/1000, dfm$v)
+plot(dfz$ta/1000, dfz$Pa1)
+plot(dfm$ta/1000, dfm$Pa1)
+```
+
+Mooi mooi, hoewel, om iets nuttig te zeggen over het geleverde motorvermogen moet de test misschien realistischer uitgevoerd worden. Pedaal modulatie toevoegen (**e_PED e,100,**) levert volgende resultaten op:
+
+```{r}
+setwd("C:/Users/jeroen.demaeyer/Google Drive/TGVelo/Studies/echecker/handelbaarheid")
+
+dfz <- read.csv2("A0wave.csv") # N0 assistance
+dfm <- read.csv2("A4wave.csv") # assistance level 4
+
+par(mfrow=c(2,2)) # combine plots in one window
+plot(dfz$ta/1000, dfz$v)
+plot(dfm$ta/1000, dfm$v)
+plot(dfz$ta/1000, dfz$Pa1)
+plot(dfm$ta/1000, dfm$Pa1)
+```
+
+Nu wil ik hier het motorvermogen uithalen. Het benodigde vermogen is op te splitsen in versnellingsvermogen en wrijvingsvermogen. Ik maak de aanname dat het wrijvingsvermogen op de eChecker in functie van de snelheid is en onafhankelijk van de versnelling. Ook vermoed ik dat de afhankelijkheid van de snelheid relatief klein is (minder dan 10 W toename bij 1 km/u snelheidstoename). Hieruit kan ik dan het wrijvingsvermogen in de test zonder en met motor gelijkaardig beschouwen.
+
+Het overblijvende verschil tussen de twee testen is dan het versnellingsvermogen en het motorvermogen, dit laatste zoeken we. Met volgende conventies:
+
+- test **1** zonder motor en test **2** met motor
+- **a** versnellingsvermogen
+- **c** het gemeten crank vermogen
+- **w** wrijvingsvermogen
+- **m** motorvermogen
+
+kunnen we volgende vergelijkingen opstellen:
+
+$$ \begin{align} 
+P_{c1} =&  P_{1w} + P_{1a} \\
+P_{c2} + P_{m} =&  P_{2w} + P_{2a} \\
+\text{if }& P_{1w} = P_{2w} \\
+\text{then }& P_{m} =  (P_{2a} - P_{1a}) + (P_{c1} - P_{c2}) \\
+\end{align} $$
+
+Het berekenen van de vermogens nodig voor versnelling zijn dus nodig...
+
+```{r, message=FALSE}
+setwd("C:/Users/jeroen.demaeyer/Google Drive/TGVelo/Studies/echecker/handelbaarheid")
+library("dplyr")
+
+dfz <- read.csv2("A0wave.csv") # N0 assistance
+dfm <- read.csv2("A4wave.csv") # assistance level 4
+
+sel <- filter(dfz, ta > 3900, ta < 8000) # Select the interessting part
+sel$ta <- sel$ta / 1000 # rescale time to sec
+sel$v <- sel$v / 3.6 # rescale speed to m/s
+
+#calculate acceleration
+sel$dv <- c(0, diff(sel$v) / diff(sel$ta)) # backward euler
+
+# Plot torque, speed and acceleration
+plot(sel$ta, sel$DMka, xlab = "Time [s]", ylab="")
+points(sel$ta, sel$v * 50, col = "green")
+points(sel$ta, sel$dv, col = "blue")
+legend("topright",
+       c("torque [Nm]", "50 x speed [m/s]", "acceleration [m/s^2]"),
+       fill = c("black", "green", "blue"))
+```
+
+The first curious thing, there are many zeros in the acceleration at times when there shouldn't. Apparantly the speed is not update every sample period. The speed sensor is probable a hall sensor based rotational encoder with a low number of magnets. Oei, dat was engels. Daarinboven zien we dat the snelheid een beetje achterloop op de koppelpiek.
+
+De berekende versnelling is dus niet echt het gebruiken waard eigenlijk...
