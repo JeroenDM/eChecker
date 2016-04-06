@@ -13,6 +13,22 @@ readcsv <- function(fileName, compressed=F, columns=c("ta", "v", "Pa1")) {
   
   data # return data frame
 }
+
+# Faster read function for big csv files with fread commando
+# requires library data.table
+readcsv2 <- function(fileName, compressed=F, columns=c("ta", "v", "Pa1")) {
+  
+  data <- fread(paste("data/", fileName, sep=""), sep=";", dec=",", data.table = F)
+  
+  if (compressed) {
+    data <- data[,columns] # ommit data not in columns
+  }
+  
+  data$ta = data$ta / 1000 # convert time to seconds
+  
+  data # return data frame
+}
+
 # library(data.table)
 # test <- fread('data/calna1_05_04.csv', header = TRUE, dec=",")
 
